@@ -23,6 +23,7 @@ function alertsFor(a) {
   holds(a.id).forEach(h => out.push({lv: "bad", t: "Program/antrenman beklemede", s: h, href: A + "?t=ozet"}));
   DB.logs.filter(l => l.athleteId === a.id && l.painLevel > 0 && daysBetween(l.date, t) <= 7 && !DB.painReviewed[l.id] && l.painLevel < 4).forEach(l => out.push({lv: "warn", t: `Ağrı bildirdi (${l.painLevel}/10)`, s: `${fmtD(l.date)} · ${l.painArea || "bölge belirtilmedi"}`, href: A + "?t=takip"}));
   DB.logs.filter(l => l.athleteId === a.id && l.date === t && l.readiness === "Çok yorgun").forEach(() => out.push({lv: "warn", t: "Bugün çok yorgun olduğunu bildirdi", s: "Seans hafifletildi.", href: A + "?t=takip"}));
+  { const p2 = activeProgram(a.id); if (p2) { const left = daysBetween(t, addDays(p2.startDate, p2.weeks * 7 - 1)); if (left >= 0 && left <= 7) out.push({lv: "warn", t: `Program ${left === 0 ? "bugün" : left + " gün içinde"} bitiyor`, s: "Yeni program veya yeniden test planlayın.", href: A + "?t=program"}); } }
   if (a.linked && a.infoDone && !activeProgram(a.id)) out.push({lv: "info", t: "Aktif program yok", s: "Program oluşturun.", href: A + "?t=program"});
   const p = activeProgram(a.id); if (p) { const cw = currentWeek(p), wk = p.weeksData.find(w => w.w === cw); if (wk && p.testWeeks.includes(cw) && !testsOf(a.id).some(r => r.date >= wk.start)) out.push({lv: "info", t: `Test haftası (hafta ${cw})`, s: "Ölçüm sekmesinden test sonuçlarını girin.", href: A + "?t=olcum"}); }
   if (DB.logs.some(l => l.athleteId === a.id)) loadSummary(a).flags.filter(f => f.lv !== "info").slice(0, 2).forEach(f => out.push({lv: f.lv, t: "Yük / toparlanma", s: f.t, href: A + "?t=takip"}));
@@ -46,7 +47,7 @@ function radarBlock(a, opt = {}) {
 function improvementList(a, max = 99) {
   const rows = TESTS.map(t => { const rs = testsOf(a.id, t.id); if (!rs.length) return null; const l = rs[rs.length - 1], c = rs.length > 1 ? compareResults(t, rs[0], l) : null; return {t, l, c}; }).filter(Boolean);
   if (!rows.length) return `<p class="small muted">Henüz test sonucu yok.</p>`;
-  return `<div class="list">${rows.slice(0, max).map(({t, l, c}) => `<div class="li" style="cursor:default"><div class="ic" style="${c && c.cls === "ok" ? "background:var(--okBg);color:var(--ok)" : ""}">${c ? (c.cls === "ok" ? "▲" : c.cls === "bad" ? "▼" : "•") : "•"}</div><div class="grow"><div class="t">${esc(t.n)}</div><div class="s">${c ? `${fmtN(c.v1, t.dec)} → <b>${fmtN(c.v2, t.dec)}</b> ${t.u}${c.pct != null ? ` (${c.pct > 0 ? "+" : ""}${fmtN(c.pct, 1)}%)` : ""}` : `${fmtN(testValue(l), t.dec)} ${t.u}`} · ${fmtD(l.date)}</div></div>${c ? pill(c.cls === "ok" ? "gelişti" : c.cls === "bad" ? "geriledi" : c.ratio < 1 ? "değişim yok" : "olası", c.cls === "ok" ? "ok" : c.cls === "bad" ? "bad" : "") : ""}</div>`).join("")}</div>`;
+  return `<div class="list">${rows.slice(0, max).map(({t, l, c}) => `<div class="li" style="cursor:default"><div class="ic" style="${c && c.cls === "ok" ? "background:var(--okBg);color:var(--ok)" : ""}">${c ? (c.cls === "ok" ? "▲" : c.cls === "bad" ? "▼" : "•") : "•"}</div><div class="grow"><div class="t">${esc(t.n)}</div><div class="s">${c ? `${fmtN(c.v1, t.dec)} → <b>${fmtN(c.v2, t.dec)}</b> ${t.u}${c.pct != null ? ` (${c.pct >= 0 ? "▲ " : "▼ "}${fmtN(Math.abs(c.pct), 1)}%)` : ""}` : `${fmtN(testValue(l), t.dec)} ${t.u}`} · ${fmtD(l.date)}</div></div>${c ? pill(c.cls === "ok" ? "gelişti" : c.cls === "bad" ? "geriledi" : c.ratio < 1 ? "değişim yok" : "olası", c.cls === "ok" ? "ok" : c.cls === "bad" ? "bad" : "") : ""}</div>`).join("")}</div>`;
 }
 function goalRow(a, g) {
   const t = g.testId ? TEST[g.testId] : null; let prog = null, cur = null;
@@ -159,7 +160,7 @@ route("/video/new", () => {
     ${VA.res ? "" : `<div class="grid2"><label class="btn pri">${ic("camera")} Kamerayla çek<input type="file" accept="video/*" capture="environment" class="vaFile" style="display:none"></label><label class="btn">${ic("play")} Galeriden seç<input type="file" accept="video/*" class="vaFile" style="display:none"></label></div>`}
     ${VA.url ? `<div class="vwrap mt"><video id="vaVid" src="${VA.url}" playsinline muted preload="auto" ${VA.res ? "controls" : ""}></video></div>` : ""}
     ${VA.url && !VA.res ? `<button class="btn blue block mt" data-act="vaRun" ${VA.busy ? "disabled" : ""}>${VA.busy ? "Analiz ediliyor…" : "Yapay zekâ ile analiz et"}</button><div id="vaProg" class="mt"></div>` : ""}
-    ${VA.res ? aiResult(VA.res) + `<div class="btns"><button class="btn" data-act="vaAgain">Yeni video</button><button class="btn pri" data-act="vaSave">Sonucu kaydet</button></div>` : ""}
+    ${VA.res ? aiResult(VA.res, VA.aid) + `<div class="btns"><button class="btn" data-act="vaAgain">Yeni video</button>${VA.res.score != null ? `<button class="btn pri" data-act="vaSave">Sonucu kaydet</button>` : `<button class="btn pri" data-act="vaAgain">Tekrar çek</button>`}</div>` : ""}
     <p class="tiny muted mt">Video telefonunuzdan çıkmaz. Yapay zekâ (MediaPipe) vücut noktalarını cihazda bulur; yorumlar spor bilimi kurallarına göre üretilir. Teşhis değildir; antrenör değerlendirmesinin yerini tutmaz.</p>`};
 });
 function wireVA() {
@@ -179,18 +180,20 @@ ACT.vaRun = async () => {
 };
 ACT.vaAgain = () => { if (VA.url) URL.revokeObjectURL(VA.url); VA.url = null; VA.file = null; VA.res = null; reRender(); };
 ACT.vaSave = () => {
+  if (VA.res.score == null) { toast("Bu video kaydedilemez; tekrar çekin."); return; }
   const rec = Object.assign({id: uid("v_")}, VA.res), aid = VA.aid;
   rec.by = myName();
   DB.videos.push(Object.assign(rec, {athleteId: aid, src: role() === "coach" ? "coach" : "athlete"}));
   saveAth(aid, role() === "coach" ? "coach" : "logs");
   if (VA.url) URL.revokeObjectURL(VA.url); VA = null; toast("Analiz kaydedildi"); go(`#/video/${aid}/${rec.id}`);
 };
-function aiResult(r) {
+function aiResult(r, aiAid) {
   const col = r.score == null ? "var(--ink3)" : r.score >= 85 ? "var(--ok)" : r.score >= 70 ? "var(--acc)" : r.score >= 50 ? "var(--warn)" : "var(--bad)";
   return `<div class="card mt" style="border-color:${col}"><div class="row">${r.score != null ? `<div style="width:76px;height:76px;border-radius:50%;border:5px solid ${col};display:flex;flex-direction:column;align-items:center;justify-content:center;flex:0 0 76px"><b style="font-size:1.4rem">${r.score}</b><span class="tiny muted">/100</span></div>` : ""}<div class="grow"><div class="tiny muted">Yapay zekâ yorumu · ${esc(r.viewName)} çekim · güvenilirlik ${esc(r.reliability)}</div><b style="color:${col}">${esc(r.level)}</b><p class="small" style="margin:4px 0 0">${esc(r.summary)}</p></div></div>
     ${r.thumb ? `<img src="${r.thumb}" alt="Anahtar kare" style="width:100%;border-radius:12px;margin-top:10px">` : ""}
     ${r.positives.length ? `<h3>👍 İyi yaptıkların</h3><ul class="small" style="padding-left:18px">${r.positives.map(x => `<li>${esc(x)}</li>`).join("")}</ul>` : ""}
     ${r.fixes.length ? `<h3>🛠 Düzeltmen gerekenler</h3>${r.fixes.map(x => `<div class="card flat" style="padding:10px;margin-bottom:8px"><b class="small">${esc(x.t)}</b><div class="small" style="color:var(--acc)">İpucu: ${esc(x.cue)}</div></div>`).join("")}` : ""}
+    ${r.type === "jump" && r.metrics.some(m => /sıçrama yüksekliği/i.test(m.n)) && role() === "coach" && aiAid ? `<button class="btn sm blue mt" data-act="vaToCMJ" data-aid="${aiAid}" data-h="${r.metrics.find(m => /sıçrama yüksekliği/i.test(m.n)).v}">Yüksekliği CMJ testine yaz</button>` : ""}
     ${r.metrics.length ? `<details class="acc"><summary class="small">Ölçümler</summary><div><table class="tbl">${r.metrics.map(m => `<tr><td>${esc(m.n)}</td><td class="r"><b>${esc(String(m.v))}</b> ${esc(m.u)}</td><td>${m.ok === true ? "✅" : m.ok === false ? "⚠️" : ""}</td></tr>`).join("")}</table></div></details>` : ""}
     ${r.drills.length ? `<h3>Önerilen çalışmalar</h3><div class="list">${r.drills.map(id => li("#/ex/" + id, "bolt", esc(exById(id).n), esc(CATS[exById(id).c]))).join("")}</div>` : ""}
     ${r.notes.length ? `<p class="tiny muted mt">${r.notes.map(esc).join(" ")}</p>` : ""}</div>`;
@@ -198,7 +201,7 @@ function aiResult(r) {
 route("/video/:aid/:vid", p => {
   const v = DB.videos.find(x => x.id === p.vid && x.athleteId === p.aid); if (!v) return {title: "Analiz", html: empty("Analiz bulunamadı")};
   const canDel = (role() === "coach" && v.src === "coach") || (role() === "athlete" && v.src === "athlete");
-  return {title: "Hareket analizi", html: `<div class="small muted">${esc(getA(p.aid).name)} · ${fmtDT(v.at)} · ${v.src === "coach" ? "antrenör çekti" : "öğrenci çekti"}</div>${aiResult(v)}
+  return {title: "Hareket analizi", html: `<div class="small muted">${esc(getA(p.aid).name)} · ${fmtDT(v.at)} · ${v.src === "coach" ? "antrenör çekti" : "öğrenci çekti"}</div>${aiResult(v, p.aid)}
     ${role() === "athlete" && v.exId ? `<a class="btn block" href="#/video/new?ex=${v.exId}">Tekrar dene</a>` : ""}${canDel ? `<button class="btn danger block mt" data-act="vidDel" data-aid="${p.aid}" data-id="${v.id}">Analizi sil</button>` : ""}`};
 });
 ACT.vidDel = async el => { if (!await confirmBox("Analiz silinsin mi?", "Sil", true)) return; const v = DB.videos.find(x => x.id === el.dataset.id); DB.videos = DB.videos.filter(x => x !== v); saveAth(el.dataset.aid, v.src === "coach" ? "coach" : "logs"); back(); };
@@ -235,3 +238,10 @@ function reportPage(a, aud) {
     <p class="tiny muted">Açılan yazdırma ekranında “PDF olarak kaydet”i seçin.</p><div class="card" style="background:#fff;color:#111"><div id="repPrev" style="font-size:13px">${reportHTML(a, aud, "")}</div></div>`};
 }
 ACT.repPrint = el => { const a = getA(el.dataset.aid), n = $("#repNote"); $("#printArea").innerHTML = reportHTML(a, el.dataset.aud, n ? n.value : ""); const t = document.title; document.title = `Rush-Athletic-${a.name.replace(/\s+/g, "-")}-${todayISO()}`; setTimeout(() => { window.print(); document.title = t; }, 60); };
+
+/* Videodan çıkan sıçrama yüksekliğini CMJ testine aktar (yalnızca antrenör; onay gerekir) */
+ACT.vaToCMJ = async el => {
+  const a = getA(el.dataset.aid), h = num(el.dataset.h); if (!isNum(h)) return;
+  if (!await confirmBox(`Videodan ölçülen ${fmtN(h, 1)} cm, ${a.name} için CMJ testi olarak kaydedilsin mi? (Video tahmini ±4 cm; resmi test değildir.)`, "Kaydet")) return;
+  saveTestResult(a, TEST.cmj, {value: h}, todayISO(), "Video AI tahmini (±4 cm)"); saveAth(a.id, "coach"); toast("CMJ testine kaydedildi"); reRender();
+};

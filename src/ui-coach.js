@@ -128,12 +128,12 @@ function saveTestResult(a, t, d, date, cond) {
   (a.goals || []).filter(g => !g.done && g.testId === t.id && isNum(g.target)).forEach(g => { if (t.lb ? v <= g.target : v >= g.target) g.done = true; });
   return r;
 }
-FORM.testRes = (d, f) => { const a = getA(f.dataset.aid), t = TEST[f.dataset.t]; if (!saveTestResult(a, t, d, d.date, d.cond)) throw new Error("Sonuç girin."); saveAth(a.id, "coach"); closeSheet(); toast("Kaydedildi"); reRender(); };
+FORM.testRes = (d, f) => { const a = getA(f.dataset.aid), t = TEST[f.dataset.t], n0 = DB.tests.length; try { if (!saveTestResult(a, t, d, d.date, d.cond)) throw new Error("Sonuç girin."); } catch (e) { DB.tests.length = n0; throw e; } saveAth(a.id, "coach"); closeSheet(); toast("Kaydedildi"); reRender(); };
 ACT.batteryEntry = el => {
   const a = getA(el.dataset.aid), sug = suggestTests(a).recommended;
   sheet(`<h2>Test bataryası</h2><p class="tiny muted">Yaş, branş ve sağlık durumuna göre seçildi. Boş bırakılanlar kaydedilmez.</p><form data-form="battery" data-aid="${a.id}">${field("Tarih", inp("date", todayISO(), 'type="date" required'))}${sug.map(t => `<div class="card flat" style="padding:10px"><b class="small">${esc(t.n)}</b>${testFields(t, t.id + "__")}</div>`).join("")}<button class="btn pri block" type="submit">Tümünü kaydet</button></form>`);
 };
-FORM.battery = (d, f) => { const a = getA(f.dataset.aid); let n = 0; for (const t of suggestTests(a).recommended) { const sub = {}; ["value", "left", "right"].forEach(k => sub[k] = d[t.id + "__" + k]); if (saveTestResult(a, t, sub, d.date, "")) n++; } if (!n) throw new Error("En az bir sonuç girin."); saveAth(a.id, "coach"); closeSheet(); toast(n + " sonuç kaydedildi"); reRender(); };
+FORM.battery = (d, f) => { const a = getA(f.dataset.aid), n0 = DB.tests.length; let n = 0; try { for (const t of suggestTests(a).recommended) { const sub = {}; ["value", "left", "right"].forEach(k => sub[k] = d[t.id + "__" + k]); if (saveTestResult(a, t, sub, d.date, "")) n++; } } catch (e) { DB.tests.length = n0; throw e; } if (!n) throw new Error("En az bir sonuç girin."); saveAth(a.id, "coach"); closeSheet(); toast(n + " sonuç kaydedildi"); reRender(); };
 ACT.measAdd = el => {
   const a = getA(el.dataset.aid), last = anth(a.id);
   sheet(`<h2>Vücut ölçümü</h2><form data-form="meas" data-aid="${a.id}">${field("Tarih", inp("date", todayISO(), 'type="date" required'))}<div class="grid2">${AFIELDS.map(([k, n, u]) => field(`${n} (${u})`, inp(k, "", `inputmode="decimal" placeholder="${isNum(last[k]) ? "son: " + last[k] : ""}"`))).join("")}</div><p class="tiny muted">Oturma boyu, olgunlaşma (büyüme atağı) tahmini için gereklidir.</p><button class="btn pri block" type="submit">Kaydet</button></form>`);
@@ -337,7 +337,6 @@ route("/c/groups/:gid", p => {
     const ws = mondayOf(todayISO()), we = addDays(ws, 6), cols = [COL.cur, COL.tgt, COL.blue, COL.bad];
     body = `<div class="card"><table class="tbl"><tr><th>Öğrenci</th><th class="r">Bu hafta</th><th class="r">Son hazırlık</th><th></th></tr>${as.map(a => { const ad = adherence(a.id, ws, we), last = DB.logs.filter(l => l.athleteId === a.id).sort((x, y) => x.date < y.date ? 1 : -1)[0], al = alertsFor(a).filter(x => x.lv !== "info").length;
       return `<tr><td><a href="#/c/a/${a.id}">${esc(a.name)}</a></td><td class="r">${ad.done}/${ad.planned}</td><td class="r">${last ? (READY.find(x => x[0] === last.readiness) || [, ""])[1] + " " + fmtD(last.date).slice(0, 5) : "—"}</td><td>${al ? pill(al + "⚠", "warn") : ""}</td></tr>`; }).join("")}</table></div>
-      ${as.length ? `<div class="card"><h3>Karşılaştırma (ilk 4)</h3>${radarSVG(QUALITIES, as.slice(0, 4).map((a, i) => ({name: a.name, color: cols[i], values: Object.fromEntries(QUALITIES.map(q => [q.k, qualityScores(a)[q.k].score])), dot: 3})))}${legend(as.slice(0, 4).map((a, i) => [cols[i], a.name]))}<p class="tiny muted">Yalnızca antrenör planlaması için; öğrencilere gösterilmez.</p></div>` : ""}
       <form class="card" data-form="groupEdit" data-gid="${g.id}"><h3>Üyeler</h3><div class="chips">${DB.athletes.map(a => `<label class="chip ${g.athleteIds.includes(a.id) ? "on" : ""}" data-toggle><input type="checkbox" name="ids" data-multi="1" value="${a.id}" ${g.athleteIds.includes(a.id) ? "checked" : ""}>${esc(a.name)}</label>`).join("")}</div><div class="btns"><button class="btn sm pri" type="submit">Kaydet</button><button type="button" class="btn sm danger" data-act="groupDel" data-gid="${g.id}">Grubu sil</button></div></form>`;
   } else if (t === "test") {
     const T = TEST[tq];

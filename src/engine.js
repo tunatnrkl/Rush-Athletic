@@ -135,7 +135,7 @@ function teOf(t, v) { return isNum(t.te) ? t.te : (t.cv || 5) / 100 * Math.abs(v
 function compareResults(t, r1, r2) {
   const v1 = testValue(r1), v2 = testValue(r2); if (!isNum(v1) || !isNum(v2)) return null;
   const delta = v2 - v1, improved = t.lb ? delta < 0 : delta > 0;
-  const pct = v1 !== 0 ? (t.lb ? -delta : delta) / Math.abs(v1) * 100 : null;
+  const pct = v1 > 0 ? (t.lb ? -delta : delta) / v1 * 100 : null;
   const te = teOf(t, (v1 + v2) / 2), ratio = Math.abs(delta) / te;
   let verdict, cls;
   if (ratio < 1) { verdict = "Ölçüm hatası sınırları içinde — anlamlı değişim kanıtı yok"; cls = "info"; }
@@ -404,6 +404,7 @@ function generateProgram(a, opt) {
   if (ctx.growthRapid) rationale.push("Hızlı büyüme dönemi: plyometrik temas üst sınırı %40 düşürüldü.");
   if (extras.length) rationale.push("Ek gelişim çalışmaları koordinasyon-denge bloğuna yerleştirildi; toplam egzersiz sayısı artırılmadı (yük nötr).");
   rationale.push(`Plyometrik temas üst sınırı: seans başına ${Math.round(PLYO_CAP[ctx.stage] * (ctx.growthRapid ? .6 : 1))} (evreye göre).`);
+  let skippedStart = 0;
   const weeksData = phases.map(ph => {
     const wStart = addDays(start, (ph.w - 1) * 7), wEnd = addDays(wStart, 6);
     let mult = ph.test ? 0.6 : ph.deload ? 0.7 : 1; const notes = [];
@@ -416,7 +417,7 @@ function generateProgram(a, opt) {
     if (ph.test) notes.push("Yeniden değerlendirme haftası: ilk seansta test bataryası uygulanır.");
     else if (testWeeks.includes(ph.w)) notes.push("Ara değerlendirme: haftanın ilk seansında kısa test bataryası.");
     const wk = Object.assign({}, ph, {mult: round(mult, 2)});
-    const sessions = days.slice(0, spwW).map((dow, dIdx) => {
+    const rawS = days.slice(0, spwW).map((dow, dIdx) => {
       const date = addDays(wStart, (dow + 6) % 7);
       const mainQs = opt.type === "focus" ? [opt.focusQ, opt.focusQ2 || relatedQ(opt.focusQ)] : [focus[dIdx % focus.length], focus[(dIdx + spwW) % focus.length]].filter((x, i, arr) => arr.indexOf(x) === i);
       const light = comps.some(c => { const g = daysBetween(date, c.date); return g >= 0 && g <= 1; });
@@ -424,8 +425,11 @@ function generateProgram(a, opt) {
       const title = light ? "Müsabaka öncesi aktivasyon" : opt.type === "focus" ? `${QN[opt.focusQ]} odaklı seans` : mainQs.map(q => QN[q]).join(" + ");
       return Object.assign({d: dIdx, dow, date, title, focus: mainQs, light, test: dIdx === 0 && testWeeks.includes(ph.w)}, s);
     });
+    const sessions = rawS.filter(x => !opt.startDate || x.date >= opt.startDate);
+    skippedStart += rawS.length - sessions.length;
     return {w: ph.w, key: ph.key, phase: ph.name, cycle: ph.cycle, mult: wk.mult, deload: !!ph.deload, test: !!ph.test, notes, start: wStart, sessions};
   });
+  if (skippedStart) warnings.push(`Başlangıç tarihinden önceki ${skippedStart} seans atlandı; program seçtiğiniz başlangıç gününden itibaren oluşturuldu.`);
   const blocksSummary = []; phases.forEach(p => { const last = blocksSummary[blocksSummary.length - 1]; if (last && last.key === p.key && last.cycle === p.cycle) last.to = p.w; else blocksSummary.push({key: p.key, name: p.name, from: p.w, to: p.w, cycle: p.cycle}); });
   const battery = suggestTests(a, sp.id).recommended.map(t => t.id);
   return {ok: true, program: {

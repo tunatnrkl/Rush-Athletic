@@ -124,6 +124,13 @@ function analyzePose(data, type, exId) {
   const res = fn(F, base, data);
   let score = 100; res.fixes.forEach(x => score -= x.w || 10); score = clamp(score, 20, 100);
   if (!res.fixes.length && !res.positives.length) score = null;
+  /* Güvenilirlik kapısı: hareket net görülmüyorsa puan verilmez, kayıt engellenir */
+  const gate = [];
+  if (legVis < 0.5 && ["squat", "lunge", "jump", "sprint", "balance", "hinge"].includes(type)) gate.push("Bacaklar net görünmüyor.");
+  if (det < 0.6) gate.push("Kişi videonun çoğunda algılanamadı.");
+  if (res.metrics.some(m => m.n === "Tekrar sayısı" && m.v === 0) && ["squat", "lunge", "pushup", "hinge"].includes(type)) gate.push("İstenen tekrarlar algılanmadı.");
+  if (res.implausible) gate.push(res.implausible);
+  if (gate.length) { score = null; res.gated = true; res.summary = "Bu video güvenilir değerlendirme için yeterli değil. " + gate.join(" ") + " Tüm vücut kadrajda, sabit ve yandan/önden net bir şekilde tekrar çekin."; res.reshoot = true; }
   res.score = score; res.level = score == null ? "—" : score >= 85 ? "Çok iyi" : score >= 70 ? "İyi" : score >= 50 ? "Geliştirilmeli" : "Dikkat";
   res.drills = [...new Set(res.fixes.flatMap(x => x.dr || []))].filter(id => typeof exById === "function" ? exById(id) : true).slice(0, 4);
   const top = res.fixes.slice().sort((a, b) => (b.w || 0) - (a.w || 0))[0];
@@ -165,7 +172,7 @@ function staticHold(F, r, kind) {
 }
 function anSquat(F, r) {
   let reps0 = hipReps(F); if (!reps0.length && r.view === "side") reps0 = reps(smooth(F.map(f => f && f.kneeMin)), 25, 12);
-  if (!reps0.length) { if (staticHold(F, r, "squat")) return r; M(r, "Tekrar sayısı", 0, ""); r.notes.push("Belirgin bir çömelme tekrarı bulunamadı."); return r; }
+  if (!reps0.length) { M(r, "Tekrar sayısı", 0, ""); staticHold(F, r, "squat"); r.notes.push("Belirgin bir çömelme tekrarı bulunamadı."); return r; }
   M(r, "Tekrar sayısı", reps0.length, "");
   const bottoms = reps0.map(x => F[x.minI]).filter(Boolean);
   depthCheck(F, r, reps0, "Ortalama derinlik");
@@ -191,7 +198,7 @@ function anSquat(F, r) {
 }
 function anLunge(F, r) {
   let reps0 = hipReps(F, 0.07, 0.03); if (!reps0.length && r.view === "side") reps0 = reps(smooth(F.map(f => f && f.kneeMin)), 25, 12);
-  if (!reps0.length) { if (staticHold(F, r, "lunge")) return r; M(r, "Tekrar sayısı", 0, ""); r.notes.push("Belirgin bir hamle tekrarı bulunamadı."); return r; }
+  if (!reps0.length) { M(r, "Tekrar sayısı", 0, ""); staticHold(F, r, "lunge"); r.notes.push("Belirgin bir hamle tekrarı bulunamadı."); return r; }
   M(r, "Tekrar sayısı", reps0.length, "");
   depthCheck(F, r, reps0, "Hamle derinliği");
   const bott = reps0.map(x => F[x.minI]).filter(Boolean);
@@ -257,7 +264,7 @@ function anSprint(F, r, data) {
   if (os.length >= 2 && r.view === "side") { const o = median(os); M(r, "Ayak basış konumu (kalçanın önü)", r1(o), "× bacak", o <= 0.3);
     if (o > 0.35) FIX(r, "Ayak vücudun çok önüne basıyor (overstriding).", "Ayağını kalçanın altına, yere 'pençeleyerek' bas.", 15, ["s3", "s1"], "sprint"); else r.positives.push("Ayak kalçaya yakın basıyor."); }
   const span = (v[v.length - 1].t - v[0].t) || 1, steps = Math.max(0, Math.round(contacts.length / 2));
-  if (steps >= 3) M(r, "Adım frekansı (yaklaşık)", r1(steps / span), "adım/sn");
+  if (steps >= 3) { const sf = steps / span; M(r, "Adım frekansı (yaklaşık)", r1(sf), "adım/sn", sf <= 6); if (sf > 6) r.implausible = "Adım frekansı insan sınırının üstünde çıktı; ölçüm güvenilir değil."; }
   const elbowRange = Math.max(...v.map(f => f.elbowL)) - Math.min(...v.map(f => f.elbowL));
   if (elbowRange < 25) FIX(r, "Kol hareketi zayıf.", "Kolları dirsek ~90° ile omuzdan güçlü salla.", 6, ["s2"]);
   return r;
