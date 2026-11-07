@@ -134,6 +134,12 @@ input.in[type=date]{min-width:0;display:block}
 .seg{display:flex;background:var(--card2);border:1px solid var(--line);border-radius:12px;padding:3px;gap:3px;margin-bottom:12px}
 .seg button{flex:1;min-height:40px;border:0;background:none;border-radius:9px;font-size:.84rem;font-weight:600;color:var(--ink3);cursor:pointer;padding:4px}
 .seg button.on{background:var(--acc);color:var(--accInk)}
+.seg a{flex:1;min-height:40px;display:flex;align-items:center;justify-content:center;border-radius:9px;font-size:.84rem;font-weight:600;color:var(--ink3);text-decoration:none;padding:4px;text-align:center}
+.seg a.on{background:var(--acc);color:var(--accInk)}
+.codebox{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:2.4rem;font-weight:800;letter-spacing:6px;color:var(--acc);margin:14px 0;user-select:all}
+.codebox span{color:var(--ink3);margin:0 4px}
+.codein{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:1.6rem!important;letter-spacing:5px;text-align:center;text-transform:uppercase}
+a.stat:active,a.li:active,.btn:active{transform:scale(.98)}
 .chart{width:100%;height:auto;display:block}
 .chart text{fill:var(--ink2);font-size:11px}
 .legend{display:flex;flex-wrap:wrap;gap:12px;font-size:.78rem;color:var(--ink2);margin-top:6px}
@@ -224,5 +230,6 @@ details.acc>div{padding:0 12px 12px}
 <div id="printArea"></div>
 <div id="toastHost"></div>
 <div id="sheetHost"></div>
+<script src="config.js"></script>
 <script>
 "use strict";
