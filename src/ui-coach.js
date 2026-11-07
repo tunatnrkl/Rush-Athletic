@@ -39,7 +39,7 @@ route("/c/code/:aid", p => {
   const a = getA(p.aid);
   if (a.linked) return {title: "Kod", html: alertBox("ok", "Kod kullanıldı", `${esc(a.name)} hesabını oluşturdu.`) + `<a class="btn pri block" href="#/c/a/${a.id}">Öğrenciye git</a>`};
   const msg = `Rush Athletic uygulamasına katılma kodun: ${a.inviteCode}\n1) ${location.origin + location.pathname} adresini aç\n2) “Öğrenciyim”e dokun\n3) Bu kodu gir ve kendi hesabını oluştur.`;
-  return {title: "Öğrenci kodu", html: `<div class="card center"><div class="small muted">${esc(a.name)} için katılma kodu</div>${codeBox(a.inviteCode)}
+  return {title: "Öğrenci kodu", html: (API.mode === "local" ? alertBox("warn", "Deneme modu", "Bu kod yalnızca bu telefonda çalışır. Öğrenci kendi telefonunda girerse “bulunamadı” hatası alır. Farklı telefonlarda kullanmak için bulut kurulumu gerekir (README).") : "") + `<div class="card center"><div class="small muted">${esc(a.name)} için katılma kodu</div>${codeBox(a.inviteCode)}
     <div class="grid2"><button class="btn" data-act="copy" data-text="${esc(a.inviteCode)}">Kopyala</button><button class="btn pri" data-act="share" data-text="${esc(msg)}">${ic("share")} Paylaş</button></div></div>
     <div class="card flat"><b class="small">Öğrenci ne yapacak?</b><ol class="small" style="padding-left:18px;margin:6px 0"><li>Uygulamayı açar → <b>Öğrenciyim</b></li><li>Bu kodu girer, kullanıcı adı ve şifre belirler</li><li>Kendi bilgilerini (doğum tarihi, spor geçmişi, sağlık) doldurur</li></ol><p class="tiny muted">Kod yalnızca bir kez kullanılabilir.</p></div>
     <a class="btn block" href="#/c/a/${a.id}">Öğrenci sayfasına git</a><a class="btn ghost block mt" href="#/c">Ana sayfa</a>`};

@@ -57,7 +57,7 @@ route("/join/parent", () => {
 FORM.checkCode = async (d, f) => {
   const code = normCode(d.code); if (code.length !== 6) throw new Error("Kod 6 karakter olmalı.");
   const kind = f.dataset.kind, info = kind === "student" ? await API.inviteInfo(code) : await API.parentCodeInfo(code);
-  if (!info) throw new Error(kind === "student" ? "Kod bulunamadı veya daha önce kullanılmış. Antrenörüne sor." : "Veli kodu bulunamadı. Çocuğundan yeni kod iste.");
+  if (!info) throw new Error(API.mode === "local" ? "Bu kod bu telefonda bulunamadı. Deneme modunda kodlar yalnızca oluşturuldukları telefonda çalışır; farklı telefondan kullanmak için bulut kurulumu gerekir." : (kind === "student" ? "Kod bulunamadı veya daha önce kullanılmış. Antrenörüne sor." : "Veli kodu bulunamadı. Çocuğundan yeni kod iste."));
   JOIN = {kind, code, info}; render();
 };
 ACT.joinReset = () => { JOIN = {}; render(); };
