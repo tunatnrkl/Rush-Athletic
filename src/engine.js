@@ -161,9 +161,9 @@ function holds(aid) {
   const r = [];
   for (const h of healthOf(aid)) {
     if (h.status === "geçmiş") continue;
-    if (h.requiresClearance && !h.clearanceGiven) r.push(`"${h.title}" (${HCAT[h.cat] ? HCAT[h.cat].n : h.cat}) için uzman/tıbbi onay bekleniyor.`);
+    if (h.requiresClearance && !h.clearanceGiven && !(DB.clearances || {})[h.id]) r.push(`"${h.title}" (${HCAT[h.cat] ? HCAT[h.cat].n : h.cat}) için uzman/tıbbi onay bekleniyor.`);
   }
-  const recentPain = DB.logs.filter(l => l.athleteId === aid && l.painLevel >= 4 && daysBetween(l.date, todayISO()) <= 3 && !l.painResolved);
+  const recentPain = DB.logs.filter(l => l.athleteId === aid && l.painLevel >= 4 && daysBetween(l.date, todayISO()) <= 3 && !l.painResolved && !(DB.painReviewed || {})[l.id]);
   if (recentPain.length) r.push(`Son 3 günde ${recentPain[0].painLevel}/10 şiddetinde ağrı bildirildi (${recentPain[0].painArea || "bölge belirtilmedi"}). Antrenör/uzman değerlendirmesi gerekli.`);
   return r;
 }
@@ -432,8 +432,8 @@ function generateProgram(a, opt) {
     id: uid("p_"), athleteId: a.id, type: opt.type || "main", focusQ: opt.focusQ || null, sport: sp.id, pos: opt.pos || null,
     weeks, spw, minutes: opt.minutes, env: opt.env, eq: [...ctx.eq], space: ctx.space, days, startDate: start, seasonAware: !!opt.seasonAware,
     testInterval: testInt, testWeeks, battery, blocks: blocksSummary, weeksData, rationale, warnings, includeExtra: !!opt.includeExtra,
-    status: "onay bekliyor", createdAt: Date.now(), createdBy: S.me.id, engine: ENGINE_VERSION, stage: ctx.stage,
-    changes: [], approvals: [{at: Date.now(), by: S.me.name, action: "Motor tarafından oluşturuldu — antrenör incelemesi bekliyor"}]
+    status: "onaylı", createdAt: Date.now(), createdBy: myId(), engine: ENGINE_VERSION, stage: ctx.stage,
+    changes: [], approvals: [{at: Date.now(), by: myName(), action: "Antrenör tarafından oluşturuldu"}]
   }};
 }
 function relatedQ(q) { return {spd: "pow", pow: "str", str: "pow", agi: "spd", end: "coo", coo: "bal", bal: "str", mob: "bal", rea: "agi"}[q] || "coo"; }
@@ -594,10 +594,8 @@ function applyOptimization(a, p, s) {
   } else if (s.action.type === "goals") {
     const g = (a.goals || []).find(g => "goal_" + g.id === s.id); if (g) g.done = true; what = "Hedef tamamlandı işaretlendi";
   } else return false;
-  p.changes.push({at: Date.now(), by: S.me.name, role: role(), what: "Optimizasyon önerisi uygulandı: " + what, reason: s.title + " — " + s.why});
-  if (role() !== "coach" && s.action.type !== "goals" && s.action.type !== "retest") { p.status = "onay bekliyor"; notify({key: "pending:" + p.id + ":" + Date.now(), athleteId: a.id, type: "program", title: "Program değişikliği onay bekliyor", body: `${a.name}: ${what}`, roles: ["coach"]}); }
-  audit("Program optimizasyonu", a.id, what);
-  save(); return true;
+  p.changes.push({at: Date.now(), by: myName(), what: "Öneri uygulandı: " + what, reason: s.title});
+  saveAth(a.id, "coach"); return true;
 }
 
 /* ---------------- Video analizi kuralları ---------------- */
@@ -668,25 +666,3 @@ function videoReport(v) {
     disclaimer: "2B video ölçümleri kamera açısı, perspektif ve işaretleme hatasından etkilenir (tipik hata birkaç derece). Bu rapor sakatlık teşhisi veya eklem hasarı tahmini içermez."};
 }
 
-/* ---------------- Bildirim zamanlayıcı ---------------- */
-let lastSched = 0;
-function runScheduler(force) {
-  if (!DB || !S.me) return; if (!force && Date.now() - lastSched < 60000) return; lastSched = Date.now();
-  const t = todayISO();
-  for (const a of DB.athletes) {
-    for (const p of programsOf(a.id).filter(p => p.status === "onaylı")) {
-      const cw = currentWeek(p); const wk = p.weeksData.find(w => w.w === cw); if (!wk) continue;
-      for (const s of wk.sessions) if (s.date === t && !logOf(p.id, cw, s.d)) notify({key: `today:${p.id}:${t}:${s.d}`, athleteId: a.id, type: "training", title: "Bugün antrenman var 💪", body: `${a.name}: ${s.title} (≈${s.estMin} dk)`, roles: ["athlete", "parent"]});
-      if (p.testWeeks.includes(cw) && !testsOf(a.id).some(r => r.date >= wk.start)) notify({key: `testdue:${p.id}:${cw}`, athleteId: a.id, type: "test", title: "Test zamanı", body: `${a.name}: Hafta ${cw} değerlendirme haftası. Önerilen batarya: ${p.battery.map(id => TEST[id] ? TEST[id].n : id).slice(0, 4).join(", ")}…`, roles: ["coach", "parent", "athlete"]});
-    }
-    for (const p of programsOf(a.id).filter(p => p.status === "onay bekliyor")) notify({key: `pending:${p.id}`, athleteId: a.id, type: "program", title: "Program onay bekliyor", body: `${a.name} için ${p.weeks} haftalık program incelemenizi bekliyor.`, roles: ["coach"]});
-    const ws = mondayOf(t);
-    if (DB.logs.some(l => l.athleteId === a.id)) {
-      const prevS = addDays(ws, -7), prevE = addDays(ws, -1), ad = adherence(a.id, prevS, prevE);
-      const ld = Object.values(dailyLoads(a.id, prevS, prevE)).reduce((s, v) => s + v.load, 0);
-      notify({key: `weekly:${a.id}:${ws}`, athleteId: a.id, type: "summary", title: "Haftalık gelişim özeti", body: `${a.name}: geçen hafta ${ad.done}/${ad.planned} seans tamamlandı, toplam yük ${Math.round(ld)} AU.`, roles: ["coach", "parent", "athlete"]});
-      const ls = loadSummary(a);
-      ls.flags.filter(f => f.lv !== "info").forEach((f, i) => notify({key: `load:${a.id}:${ws}:${f.t.slice(0, 24)}`, athleteId: a.id, type: "load", title: "Yük / toparlanma uyarısı", body: `${a.name}: ${f.t}`, roles: ["coach", "parent"]}));
-    }
-  }
-}
